@@ -93,15 +93,24 @@ jobs:
           ref: mainline
           path: susfs_patch
 
+      # ============ 关键改动 1：强制 patch 失败就停 ============
       - name: Patch Kernel
         working-directory: kernel
         run: |
+          set -e
           patch -p1 < $GITHUB_WORKSPACE/Patches/susfs-syscall-hooks.patch
           patch -p1 < $GITHUB_WORKSPACE/Patches/static-symbol-export.patch
+          echo "=== 检查是否有 .rej 文件 ==="
+          find . -name "*.rej" -print
+          if find . -name "*.rej" | grep -q .; then
+            echo "ERROR: 有 .rej 文件，patch 没打上"
+            exit 1
+          fi
 
       - name: Apply KernelPatch for SUSFS
         working-directory: kernel
         run: |
+          set -e
           patch -p1 < $GITHUB_WORKSPACE/susfs_patch/Patches/Patch/susfs_patch_to_4.14.patch || true
           patch -p1 < $GITHUB_WORKSPACE/Patches/susfs_patch_taskmmu.patch
           if [ "${{ inputs.SOURCECODE_BRANCH }}" = "T" ]; then
@@ -112,48 +121,59 @@ jobs:
             patch -p1 < $GITHUB_WORKSPACE/Patches/susfs_patch_newuname.patch
           fi
 
+      # ============ 关键改动 2：验证 ksu_handle_newfstat_ret 是否真的在源码里 ============
+      - name: Verify newfstat hook
+        working-directory: kernel
+        run: |
+          echo "=== 检查 fs/stat.c 里的 ksu_handle_newfstat_ret ==="
+          grep -n "ksu_handle_newfstat_ret" fs/stat.c || echo "!!! fs/stat.c 里没有 ksu_handle_newfstat_ret"
+          echo "=== 检查 fs/stat.c 里的 ksu_handle_stat ==="
+          grep -n "ksu_handle_stat" fs/stat.c || echo "!!! fs/stat.c 里没有 ksu_handle_stat"
+          echo "=== 检查 CONFIG_KSU_MANUAL_HOOK 是否在 defconfig 里 ==="
+          grep -n "CONFIG_KSU_MANUAL_HOOK" arch/arm64/configs/ares_user_defconfig || echo "!!! defconfig 里没有 CONFIG_KSU_MANUAL_HOOK"
+
       - name: Copy defconfig
         run: |
           if [ "${{ inputs.enable_feature_kpm }}" = "true" ]; then
             echo "CONFIG_KALLSYMS_ALL=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
             echo "CONFIG_KPM=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
-          fi
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
-          cat $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
+请将下面的文本准确无误地翻译成
+回声
+cat $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
       
-      - name: Build Kernel for K40GE
-        working-directory: kernel
-        env:
-          args: |+
-            LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-            CC=clang LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3
-        run: |
-          export KBUILD_BUILD_TIMESTAMP=$(date)
-          export PATH=/usr/lib/ccache:$GITHUB_WORKSPACE/toolchain/bin:$PATH
-          make -j$(nproc --all) ${args} ares_user_defconfig all
+      - 名字: K40GE构建内核
+        working-directory: 核
+环境:
+参数: |+
+LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+CC=clang LD=ld.lld HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS_PERF+=-O3
+跑: |
+导出 KBUILD_BUILD_TIMESTAMP=$
+名字 LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+使
       
-      - name: Apply KernelPatch for KPM
-        if: ${{ inputs.enable_feature_kpm }}
+      - 用 Magiskboot: Magisk引导程序
+tar -xvf boot.tar.gz: Chmod +x magiskboot{{ inputs.enable_feature_kpm }}
         working-directory: kernel/out/arch/arm64/boot
-        run: |
-          cp $GITHUB_WORKSPACE/sukisu_patch/kpm/patch_linux .
-          chmod +x patch_linux
-          ./patch_linux
-          mv oImage Image
+./magiskboot unpack boot.img: |
+cp $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/Image ./kernel
+./magiskboot repack boot.img boot_SukiSU_$
+./patch_linux
+名字
 
-      - name: Pack Kernel using Magiskboot
-        working-directory: Magiskboot
-        run: |
-            tar -xvf boot.tar.gz
-            chmod +x magiskboot
-            ./magiskboot unpack boot.img
-            cp $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/Image ./kernel
-            ./magiskboot repack boot.img boot_SukiSU_${{ env.KSUVER }}.img
+      - 使: 用 Magisk
+        working-directory: Magisk引导程序
+tar -xvf boot.tar.gz: |
+chmod +x magiskboot
+make -j$(nproc --all) $
+名字
+焦油-xvf启动。焦油
+chmod +x magiskboot{{env.KSUVER}为 KPM
 
-      - name: Upload repacked boot image
-        uses: actions/upload-artifact@v4
-        with:
-          name: K40GE_SukiSU_${{ env.KSUVER }}
-          path: Magiskboot/boot_SukiSU_${{ env.KSUVER }}.img
+- 参数 make-j$mayor(proc-all)$youmor KBUILD_BUILD_TIMESTAMP=$ares_user_defconfig allyou PATH=/usr/lib/ccache:$GITHUB_WORKSPACE/toolchain/bin:you:you
+名字: cp $GITHUB_WORKSPACE/sukisu_patch/kpm/patch_linux .
+为 KPMchmod+x patch_linux
+影像：{chmod +x patch_linux{你}}
+用 Magiskboot：Magisk你喜欢吗
           compression-level: 9
